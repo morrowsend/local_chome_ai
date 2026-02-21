@@ -161,6 +161,41 @@
     const lightbox       = document.getElementById('lightbox');
     const lightboxImg    = document.getElementById('lightbox-img');
 
+    // NEW: settings modal
+    const settingsModal      = document.getElementById('settings-modal');
+    const settingsBtn        = document.getElementById('settings-btn');
+    const settingsCancelBtn  = document.getElementById('settings-cancel-btn');
+    const settingsSaveBtn    = document.getElementById('settings-save-btn');
+    const sHistoryCount      = document.getElementById('s-history-count');
+    const sStoreImages       = document.getElementById('s-store-images');
+    const sMinimal           = document.getElementById('s-minimal');
+
+    settingsBtn.onclick = () => {
+        sHistoryCount.value = settings.historyCount;
+        sStoreImages.checked = settings.storeImages;
+        sMinimal.checked = (settings.historyCount === 10 && !settings.storeImages);
+        settingsModal.classList.add('open');
+    };
+    settingsCancelBtn.onclick = () => settingsModal.classList.remove('open');
+    settingsModal.onclick = (e) => { if (e.target === settingsModal) settingsModal.classList.remove('open'); };
+
+    sMinimal.onchange = () => {
+        if (sMinimal.checked) {
+            sHistoryCount.value = 10;
+            sStoreImages.checked = false;
+        }
+    };
+    // Uncheck minimal if user manually changes a field
+    sHistoryCount.oninput = () => { sMinimal.checked = false; };
+    sStoreImages.onchange = () => { sMinimal.checked = false; };
+
+    settingsSaveBtn.onclick = () => {
+        settings.historyCount = Math.max(1, parseInt(sHistoryCount.value) || DEFAULTS.historyCount);
+        settings.storeImages  = sStoreImages.checked;
+        localStorage.setItem('gemini_settings', JSON.stringify(settings));
+        settingsModal.classList.remove('open');
+    };
+
     // NEW: image attachment handlers
     imgAttachBtn.onclick = () => imgFileInput.click();
     imgFileInput.onchange = (e) => {
@@ -260,7 +295,7 @@
         currentChatId = id;
         chatContainer.innerHTML = '';
         chatTitle.textContent = allChats[id].title;
-        allChats[id].history.forEach(m => appendToUI(m.role, m.text));
+        allChats[id].history.forEach(m => appendToUI(m.role, m.text, m.imageDataUrl || null));
         renderSidebar();
     }
 
@@ -292,13 +327,13 @@
         clearStaged();
         userInput.value = '';
 
-        allChats[currentChatId].history.push({ role: 'user', text });  // imageDataUrl intentionally not saved
+        allChats[currentChatId].history.push({ role: 'user', text, ...(settings.storeImages && imageDataUrl ? { imageDataUrl } : {}) });
         appendToUI('user', text, imageDataUrl);
 
         const aiMsgDiv = appendToUI('ai', '...');
         
         try {
-            const context = allChats[currentChatId].history.slice(-7, -1).map(m => `${m.role}: ${m.text}`).join("\n");
+            const context = allChats[currentChatId].history.slice(-settings.historyCount, -1).map(m => `${m.role}: ${m.text}`).join("\n");
 
             let fullAiText = "";
 
