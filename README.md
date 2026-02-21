@@ -1,8 +1,8 @@
 🤖 Local Gemini Nano Chat
-A Private, Offline AI Interface for Chrome
-This project is a lightweight, single-file HTML interface that allows you to chat with Gemini Nano, the large language model built directly into Google Chrome.
+A Private, Offline AI Interface for Chrome (2026 Edition)
+This project is a single-file, zero-dependency HTML interface for chatting with Gemini Nano—the LLM built directly into Google Chrome.
 
-Unlike traditional AI tools, this doesn't use an API key, doesn't cost money, and never sends your data to the cloud. It runs 100% locally on your computer's GPU/CPU. (Really, turn off your WiFi and try it!)
+Unlike cloud-based AI, this project requires no API keys, no internet (after setup), and costs $0. It runs entirely on your local hardware via Chrome's window.ai (Language Model) API. (Really, turn off your WiFi and try it!)
 
 ✨ Features
 Total Privacy: Your conversations stay on your hard drive.
@@ -11,13 +11,15 @@ Multi-Chat Sidebar: Manage multiple threads like a pro.
 
 Persistent Memory: Uses browser Local Storage to remember multiple chat sessions.
 
-Smart Summarization: Automatically condenses long conversations to stay within the model's token limits.
+Smart Summarization: Automatically "compresses" long histories to fit local memory limits.
 
 Session Sidebar: Create, name, and switch between different chat threads.
+Vision & OCR: Upload images to extract text or describe visual content locally.
+
 
 Download & Delete: Export transcripts to .txt or wipe individual chats and total history with one click.
 
-Zero Latency: No server wait times—if your GPU is fast, the AI is fast. On the other side of tht coin, if your GPU is slow, so is this.
+Zero Latency: No server wait times—if your GPU is fast, the AI is fast. On the other side of that coin, if your GPU is slow, so is this.
 
 🚀 Setup Instructions (Chrome 144+)
 Since window.ai is part of Chrome's AI Mode ecosystem, you must manually enable it and download the "brain" (on-device model).
@@ -27,9 +29,11 @@ Paste these into your address bar and set them to Enabled:
 
 chrome://flags/#prompt-api-for-gemini-nano
 
-chrome://flags/#optimization-guide-on-device-model (Set to Enabled BypassPrefRequirement)
+chrome://flags/#prompt-api-for-gemini-nano-multimodal-input (Enables Image/Vision support)
 
-Relaunch Chrome after changing these. chrome://restart
+chrome://flags/#optimization-guide-on-device-model → Set to Enabled BypassPerfRequirement.
+
+Relaunch Chrome after changing these: chrome://restart
 
 2. Force the Model Download
 Chrome needs to download the 2GB–4GB model file.

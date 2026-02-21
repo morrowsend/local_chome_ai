@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini Nano - Multi-Chat Edition</title>
+    <style>
+        :root { --sidebar-width: 260px; }
+        body { font-family: sans-serif; background: #f4f4f9; display: flex; height: 100vh; margin: 0; overflow: hidden; }
+        
+        /* Sidebar */
+        #sidebar { width: var(--sidebar-width); background: #202123; color: white; display: flex; flex-direction: column; padding: 10px; }
+        #new-chat-btn { background: #34a853; color: white; border: none; padding: 12px; border-radius: 5px; cursor: pointer; margin-bottom: 15px; font-weight: bold; }
+        #chat-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; }
+        
+        .chat-item-wrapper { display: flex; align-items: center; border-radius: 5px; cursor: pointer; border: 1px solid transparent; position: relative; }
+        .chat-item-wrapper:hover { background: #343541; }
+        .chat-item-wrapper.active { background: #343541; border-color: #34a853; }
+        .chat-item-title { flex: 1; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 10px; }
+        
+        .delete-btn { opacity: 0; color: #888; padding: 5px 10px; font-size: 18px; transition: opacity 0.2s; }
+        .chat-item-wrapper:hover .delete-btn { opacity: 1; }
+        .delete-btn:hover { color: #ff4d4d; }
+
+        #clear-all-btn { background: transparent; color: #ff4d4d; border: 1px solid #ff4d4d; padding: 8px; border-radius: 5px; cursor: pointer; margin-top: 10px; font-size: 12px; transition: 0.2s; }
+        #clear-all-btn:hover { background: #ff4d4d; color: white; }
+
+        /* Main Area */
+        #main { flex: 1; display: flex; flex-direction: column; background: #fff; }
+        header { padding: 15px 20px; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; }
+        #chat-container { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 10px; }
+        .message { padding: 10px 15px; border-radius: 15px; max-width: 80%; line-height: 1.5; word-wrap: break-word; }
+        .user { align-self: flex-end; background: #007bff; color: white; }
+        .ai { align-self: flex-start; background: #e9e9eb; color: #333; white-space: pre-wrap; }
+
+        /* NEW: image inside a message bubble */
+        .message img { display: block; max-width: 260px; max-height: 180px; border-radius: 8px; margin-bottom: 6px; cursor: pointer; }
+
+        /* NEW: staging preview above input */
+        #img-preview-bar { display: none; align-items: center; gap: 8px; padding: 6px 0; }
+        #img-preview-bar img { width: 40px; height: 40px; object-fit: cover; border-radius: 5px; border: 1px solid #ccc; }
+        #img-preview-bar span { font-size: 12px; color: #555; flex: 1; }
+        #img-preview-bar button { background: none; border: none; color: #999; font-size: 18px; cursor: pointer; }
+        #img-preview-bar button:hover { color: #ff4d4d; }
+
+        #input-area { padding: 20px; border-top: 1px solid #ddd; display: flex; flex-direction: column; gap: 6px; }
+        #input-row { display: flex; gap: 10px; }
+        input[type=text] { flex: 1; padding: 12px; border: 1px solid #ccc; border-radius: 5px; outline: none; }
+        .btn-primary { background: #34a853; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        .btn-outline { background: transparent; color: #555; border: 1px solid #ccc; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 12px; }
+
+        /* NEW: lightbox */
+        #lightbox { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 100; align-items: center; justify-content: center; cursor: zoom-out; }
+        #lightbox.open { display: flex; }
+        #lightbox img { max-width: 90vw; max-height: 90vh; border-radius: 10px; cursor: default; }
+
+        /* NEW: settings modal */
+        #settings-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; align-items: center; justify-content: center; }
+        #settings-modal.open { display: flex; }
+        #settings-box { background: #fff; border-radius: 10px; padding: 24px; width: 320px; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.2); }
+        #settings-box h3 { margin: 0; font-size: 16px; }
+        .setting-row { display: flex; align-items: center; justify-content: space-between; font-size: 14px; gap: 10px; }
+        .setting-row label { color: #333; }
+        .setting-row input[type=number] { width: 64px; padding: 5px 8px; border: 1px solid #ccc; border-radius: 5px; font-size: 14px; }
+        .setting-row input[type=checkbox] { width: 16px; height: 16px; cursor: pointer; }
+        #settings-divider { border: none; border-top: 1px solid #eee; margin: 0; }
+        #settings-footer { display: flex; justify-content: flex-end; gap: 8px; }
+        #settings-btn { background: transparent; color: #aaa; border: 1px solid #444; padding: 8px; border-radius: 5px; cursor: pointer; margin-top: 10px; font-size: 12px; transition: 0.2s; }
+        #settings-btn:hover { background: #343541; color: white; }
+    </style>
+</head>
+<body>
+
+<div id="sidebar">
+    <button id="new-chat-btn">+ New Chat</button>
+    <div id="chat-list"></div>
+    <button id="settings-btn">⚙ Settings</button>
+    <button id="clear-all-btn">🗑 Clear All History</button>
+</div>
+
+<div id="main">
+    <header>
+        <div>
+            <strong id="chat-title">New Conversation</strong><br>
+            <small id="status" style="color: #888;">Initializing...</small>
+        </div>
+        <button id="exportBtn" class="btn-outline">Download (.txt)</button>
+    </header>
+    <div id="chat-container"></div>
+    <div id="input-area">
+        <!-- NEW: staging preview bar -->
+        <div id="img-preview-bar">
+            <img id="preview-thumb" src="" alt="">
+            <span id="preview-name"></span>
+            <button id="remove-img-btn" title="Remove">&times;</button>
+        </div>
+        <div id="input-row">
+            <input type="file" id="img-file-input" accept="image/*" style="display:none">
+            <button class="btn-outline" id="img-attach-btn" title="Attach image">🖼</button>
+            <input type="text" id="userInput" placeholder="Type a message..." disabled>
+            <button id="sendBtn" class="btn-primary" disabled>Send</button>
+        </div>
+    </div>
+</div>
+
+<!-- NEW: settings modal -->
+<div id="settings-modal">
+    <div id="settings-box">
+        <h3>⚙ Settings</h3>
+        <div class="setting-row">
+            <label for="s-history-count">Messages saved (back &amp; forth pairs)</label>
+            <input type="number" id="s-history-count" min="1" max="100">
+        </div>
+        <div class="setting-row">
+            <label for="s-store-images">Store images in localStorage</label>
+            <input type="checkbox" id="s-store-images">
+        </div>
+        <hr id="settings-divider">
+        <div class="setting-row">
+            <label for="s-minimal"><strong>Minimal mode</strong> (10 messages, no images)</label>
+            <input type="checkbox" id="s-minimal">
+        </div>
+        <div id="settings-footer">
+            <button class="btn-outline" id="settings-cancel-btn">Cancel</button>
+            <button class="btn-primary" id="settings-save-btn">Save</button>
+        </div>
+    </div>
+</div>
+
+<!-- NEW: lightbox -->
+<div id="lightbox"><img id="lightbox-img" src="" alt=""></div>
+
+<script>
+    let session;
+    let currentChatId = null;
+    let allChats = JSON.parse(localStorage.getItem('gemini_sessions')) || {};
+
+    // Settings (persisted separately)
+    const DEFAULTS = { historyCount: 7, storeImages: false };
+    let settings = Object.assign({}, DEFAULTS, JSON.parse(localStorage.getItem('gemini_settings') || '{}'));
+
+    // NEW: staged image state
+    let stagedFile = null;
+    let stagedDataUrl = null;
+
+    const chatList = document.getElementById('chat-list');
+    const chatContainer = document.getElementById('chat-container');
+    const userInput = document.getElementById('userInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const chatTitle = document.getElementById('chat-title');
+    const exportBtn = document.getElementById('exportBtn');
+    const clearAllBtn = document.getElementById('clear-all-btn');
+
+    // NEW: image element refs
+    const imgFileInput   = document.getElementById('img-file-input');
+    const imgAttachBtn   = document.getElementById('img-attach-btn');
+    const imgPreviewBar  = document.getElementById('img-preview-bar');
+    const previewThumb   = document.getElementById('preview-thumb');
+    const previewName    = document.getElementById('preview-name');
+    const removeImgBtn   = document.getElementById('remove-img-btn');
+    const lightbox       = document.getElementById('lightbox');
+    const lightboxImg    = document.getElementById('lightbox-img');
+
+    // NEW: image attachment handlers
+    imgAttachBtn.onclick = () => imgFileInput.click();
+    imgFileInput.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        stagedFile = file;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            stagedDataUrl = ev.target.result;
+            previewThumb.src = stagedDataUrl;
+            previewName.textContent = file.name;
+            imgPreviewBar.style.display = 'flex';
+        };
+        reader.readAsDataURL(file);
+        imgFileInput.value = '';
+    };
+    removeImgBtn.onclick = clearStaged;
+    function clearStaged() {
+        stagedFile = null; stagedDataUrl = null;
+        previewThumb.src = ''; previewName.textContent = '';
+        imgPreviewBar.style.display = 'none';
+    }
+
+    // NEW: lightbox
+    lightbox.onclick = () => lightbox.classList.remove('open');
+    function openLightbox(src) { lightboxImg.src = src; lightbox.classList.add('open'); }
+
+    async function init() {
+        try {
+            // FIX 1: declare expectedInputs so model loads multimodal weights
+            session = await LanguageModel.create({
+                systemPrompt: "Your name is Gemini Nano. You are a local AI assistant. Be helpful and concise.",
+                expectedInputs: [{ type: "text" }, { type: "image" }]
+            });
+            document.getElementById('status').textContent = "Model Online";
+            userInput.disabled = false;
+            sendBtn.disabled = false;
+            
+            renderSidebar();
+            const ids = Object.keys(allChats);
+            if (ids.length > 0) loadChat(ids[ids.length - 1]);
+            else startNewChat();
+        } catch (e) { document.getElementById('status').textContent = "Error: Check chrome://flags"; }
+    }
+
+    function renderSidebar() {
+        chatList.innerHTML = '';
+        Object.keys(allChats).sort().reverse().forEach(id => {
+            const wrapper = document.createElement('div');
+            wrapper.className = `chat-item-wrapper ${id === currentChatId ? 'active' : ''}`;
+            
+            const titleSpan = document.createElement('span');
+            titleSpan.className = 'chat-item-title';
+            titleSpan.textContent = allChats[id].title || "Untitled Chat";
+            titleSpan.onclick = () => loadChat(id);
+            
+            const delBtn = document.createElement('span');
+            delBtn.className = 'delete-btn';
+            delBtn.innerHTML = '&times;';
+            delBtn.onclick = (e) => {
+                e.stopPropagation();
+                deleteChat(id);
+            };
+            
+            wrapper.appendChild(titleSpan);
+            wrapper.appendChild(delBtn);
+            chatList.appendChild(wrapper);
+        });
+    }
+
+    function deleteChat(id) {
+        if (!confirm("Delete this conversation?")) return;
+        delete allChats[id];
+        save();
+        if (id === currentChatId) {
+            const remainingIds = Object.keys(allChats);
+            if (remainingIds.length > 0) loadChat(remainingIds[remainingIds.length - 1]);
+            else startNewChat();
+        } else { renderSidebar(); }
+    }
+
+    clearAllBtn.onclick = () => {
+        if (!confirm("Are you sure you want to wipe ALL chat history? This cannot be undone.")) return;
+        allChats = {};
+        save();
+        startNewChat();
+    };
+
+    function startNewChat() {
+        currentChatId = Date.now().toString();
+        allChats[currentChatId] = { title: "New Conversation", history: [] };
+        save();
+        loadChat(currentChatId);
+    }
+
+    function loadChat(id) {
+        currentChatId = id;
+        chatContainer.innerHTML = '';
+        chatTitle.textContent = allChats[id].title;
+        allChats[id].history.forEach(m => appendToUI(m.role, m.text));
+        renderSidebar();
+    }
+
+    // CHANGED: accept optional imageDataUrl for display
+    function appendToUI(role, text, imageDataUrl) {
+        const msgDiv = document.createElement('div');
+        msgDiv.className = `message ${role}`;
+        // NEW: if there's an image, show it above the text
+        if (imageDataUrl) {
+            const img = document.createElement('img');
+            img.src = imageDataUrl;
+            img.onclick = () => openLightbox(imageDataUrl);
+            msgDiv.appendChild(img);
+        }
+        const textNode = document.createTextNode(text);
+        msgDiv.appendChild(textNode);
+        chatContainer.appendChild(msgDiv);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+        return msgDiv;
+    }
+
+    async function sendMessage() {
+        const text = userInput.value.trim();
+        if ((!text && !stagedFile) || !session) return;
+
+        // Snapshot and clear staged image before async work
+        const imageFile    = stagedFile;
+        const imageDataUrl = stagedDataUrl;
+        clearStaged();
+        userInput.value = '';
+
+        allChats[currentChatId].history.push({ role: 'user', text });  // imageDataUrl intentionally not saved
+        appendToUI('user', text, imageDataUrl);
+
+        const aiMsgDiv = appendToUI('ai', '...');
+        
+        try {
+            const context = allChats[currentChatId].history.slice(-7, -1).map(m => `${m.role}: ${m.text}`).join("\n");
+
+            let fullAiText = "";
+
+            if (imageFile) {
+                // FIX 2: correct multimodal prompt shape — array of {role, content:[parts]}
+                // Without the `content` property the API throws "Required member is undefined"
+                const messages = [{
+                    role: "user",
+                    content: [
+                        { type: "text",  value: context ? context + "\n" + (text || "Describe this image.") : (text || "Describe this image.") },
+                        { type: "image", value: imageFile }  // File is a Blob subtype, accepted directly
+                    ]
+                }];
+                try {
+                    const stream = session.promptStreaming(messages);
+                    for await (const chunk of stream) {
+                        fullAiText = chunk.startsWith(fullAiText) ? chunk : fullAiText + chunk;
+                        aiMsgDiv.lastChild.textContent = fullAiText;
+                    }
+                } catch (_) {
+                    // fall back to non-streaming if build doesn't support it for multimodal
+                    fullAiText = await session.prompt(messages);
+                    aiMsgDiv.lastChild.textContent = fullAiText;
+                }
+            } else {
+                // original text-only path — unchanged
+                const stream = session.promptStreaming(`${context}\nuser: ${text}\nai:`);
+                for await (const chunk of stream) {
+                    fullAiText = chunk.startsWith(fullAiText) ? chunk : fullAiText + chunk;
+                    aiMsgDiv.textContent = fullAiText;
+                }
+            }
+
+            allChats[currentChatId].history.push({ role: 'ai', text: fullAiText });
+            
+            if (allChats[currentChatId].title === "New Conversation") {
+                const title = await session.prompt(`Summarize this query into a 3-word title: ${text || "an image"}`);
+                allChats[currentChatId].title = title.replace(/"/g, '').trim();
+                chatTitle.textContent = allChats[currentChatId].title;
+            }
+            save();
+            renderSidebar();
+        } catch (e) { aiMsgDiv.textContent = "Error: " + e.message; }
+    }
+
+    function save() { localStorage.setItem('gemini_sessions', JSON.stringify(allChats)); }
+
+    exportBtn.onclick = () => {
+        const history = allChats[currentChatId].history;
+        const textContent = history.map(m => `${m.role.toUpperCase()}: ${m.text}`).join('\n\n---\n\n');
+        const blob = new Blob([textContent], { type: 'text/plain' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `Chat_${allChats[currentChatId].title.replace(/\s+/g, '_')}.txt`;
+        a.click();
+    };
+
+    document.getElementById('new-chat-btn').onclick = startNewChat;
+    sendBtn.onclick = sendMessage;
+    userInput.onkeypress = (e) => { if (e.key === 'Enter') sendMessage(); };
+
+    init();
+</script>
+</body>
+</html>
