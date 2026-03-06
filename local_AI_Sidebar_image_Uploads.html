@@ -99,6 +99,7 @@
             <button class="btn-outline" id="img-attach-btn" title="Attach image">🖼</button>
             <textarea id="userInput" placeholder="Type a message..." disabled rows="1" style="resize:none;overflow-y:hidden;line-height:1.4;padding:12px;border:1px solid #ccc;border-radius:5px;outline:none;flex:1;font-family:sans-serif;font-size:14px;"></textarea>
             <button id="sendBtn" class="btn-primary" disabled>Send</button>
+            <button id="stopBtn" class="btn-outline" style="display:none;color:#cc0000;border-color:#cc0000;">⏹ Stop</button>
         </div>
     </div>
 </div>
@@ -142,15 +143,18 @@
     // Settings (persisted separately)
     const DEFAULTS = { historyCount: 7, storeImages: false, streamingEffect: true };
     let settings = Object.assign({}, DEFAULTS, JSON.parse(localStorage.getItem('gemini_settings') || '{}'));
+    delete settings.streamingEffect; // remove if persisted from a previous broken version
 
     // NEW: staged image state
     let stagedFile = null;
     let stagedDataUrl = null;
+    let abortController = null;
 
     const chatList = document.getElementById('chat-list');
     const chatContainer = document.getElementById('chat-container');
     const userInput = document.getElementById('userInput');
     const sendBtn = document.getElementById('sendBtn');
+    const stopBtn = document.getElementById('stopBtn');
     const chatTitle = document.getElementById('chat-title');
     const exportBtn = document.getElementById('exportBtn');
     const clearAllBtn = document.getElementById('clear-all-btn');
@@ -202,6 +206,24 @@
         settings.streamingEffect = sStreaming.checked;
         localStorage.setItem('gemini_settings', JSON.stringify(settings));
         settingsModal.classList.remove('open');
+    };
+
+    // Stop button — destroy session to guarantee inference stops in RAM, then reinit
+    stopBtn.onclick = async () => {
+        if (abortController) abortController.abort();
+        if (session) { session.destroy(); session = null; }
+        stopBtn.style.display = 'none';
+        sendBtn.style.display = '';
+        sendBtn.disabled = true;
+        document.getElementById('status').textContent = "Restarting...";
+        try {
+            session = await LanguageModel.create({
+                systemPrompt: "Your name is Gemini Nano. You are a local AI assistant. Be helpful and concise.",
+                expectedInputs: [{ type: "text" }, { type: "image" }]
+            });
+            document.getElementById('status').textContent = "Model Online";
+            sendBtn.disabled = false;
+        } catch (e) { document.getElementById('status').textContent = "Error: Check chrome://flags"; }
     };
 
     // NEW: image attachment handlers
@@ -340,7 +362,11 @@
         appendToUI('user', text, imageDataUrl);
 
         const aiMsgDiv = appendToUI('ai', '...');
-        
+
+        abortController = new AbortController();
+        sendBtn.style.display = 'none';
+        stopBtn.style.display = '';
+
         try {
             const context = allChats[currentChatId].history.slice(-settings.historyCount, -1).map(m => `${m.role}: ${m.text}`).join("\n");
 
@@ -357,37 +383,50 @@
                     ]
                 }];
                 try {
-                    const stream = session.promptStreaming(messages);
+                    const stream = session.promptStreaming(messages, { signal: abortController.signal });
                     for await (const chunk of stream) {
                         fullAiText = chunk.startsWith(fullAiText) ? chunk : fullAiText + chunk;
                         if (settings.streamingEffect) aiMsgDiv.lastChild.textContent = fullAiText;
                     }
                     aiMsgDiv.lastChild.textContent = fullAiText;
-                } catch (_) {
-                    // fall back to non-streaming if build doesn't support it for multimodal
-                    fullAiText = await session.prompt(messages);
-                    aiMsgDiv.lastChild.textContent = fullAiText;
+                } catch (err) {
+                    if (err.name === 'AbortError') { aiMsgDiv.lastChild.textContent = fullAiText || '[stopped]'; }
+                    else {
+                        // fall back to non-streaming if build doesn't support it for multimodal
+                        fullAiText = await session.prompt(messages);
+                        aiMsgDiv.lastChild.textContent = fullAiText;
+                    }
                 }
             } else {
-                // original text-only path — unchanged
-                const stream = session.promptStreaming(`${context}\nuser: ${text}\nai:`);
-                for await (const chunk of stream) {
-                    fullAiText = chunk.startsWith(fullAiText) ? chunk : fullAiText + chunk;
-                    if (settings.streamingEffect) aiMsgDiv.textContent = fullAiText;
+                // original text-only path
+                const stream = session.promptStreaming(`${context}\nuser: ${text}\nai:`, { signal: abortController.signal });
+                try {
+                    for await (const chunk of stream) {
+                        fullAiText = chunk.startsWith(fullAiText) ? chunk : fullAiText + chunk;
+                        if (settings.streamingEffect) aiMsgDiv.textContent = fullAiText;
+                    }
+                } catch (err) {
+                    if (err.name !== 'AbortError') throw err;
                 }
-                aiMsgDiv.textContent = fullAiText;
+                aiMsgDiv.textContent = fullAiText || '[stopped]';
             }
 
-            allChats[currentChatId].history.push({ role: 'ai', text: fullAiText });
-            
-            if (allChats[currentChatId].title === "New Conversation") {
-                const title = await session.prompt(`Summarize this query into a 3-word title: ${text || "an image"}`);
-                allChats[currentChatId].title = title.replace(/"/g, '').trim();
-                chatTitle.textContent = allChats[currentChatId].title;
+            if (fullAiText && fullAiText !== '[stopped]') {
+                allChats[currentChatId].history.push({ role: 'ai', text: fullAiText });
+                if (allChats[currentChatId].title === "New Conversation" && session) {
+                    const title = await session.prompt(`Summarize this query into a 3-word title: ${text || "an image"}`);
+                    allChats[currentChatId].title = title.replace(/"/g, '').trim();
+                    chatTitle.textContent = allChats[currentChatId].title;
+                }
+                save();
+                renderSidebar();
             }
-            save();
-            renderSidebar();
         } catch (e) { aiMsgDiv.textContent = "Error: " + e.message; }
+        finally {
+            abortController = null;
+            sendBtn.style.display = '';
+            stopBtn.style.display = 'none';
+        }
     }
 
     function save() { localStorage.setItem('gemini_sessions', JSON.stringify(allChats)); }
