@@ -115,6 +115,10 @@
             <label for="s-store-images">Store images in localStorage</label>
             <input type="checkbox" id="s-store-images">
         </div>
+        <div class="setting-row">
+            <label for="s-streaming">Typing effect (stream AI response)</label>
+            <input type="checkbox" id="s-streaming">
+        </div>
         <hr id="settings-divider">
         <div class="setting-row">
             <label for="s-minimal"><strong>Minimal mode</strong> (10 messages, no images)</label>
@@ -136,7 +140,7 @@
     let allChats = JSON.parse(localStorage.getItem('gemini_sessions')) || {};
 
     // Settings (persisted separately)
-    const DEFAULTS = { historyCount: 7, storeImages: false };
+    const DEFAULTS = { historyCount: 7, storeImages: false, streamingEffect: true };
     let settings = Object.assign({}, DEFAULTS, JSON.parse(localStorage.getItem('gemini_settings') || '{}'));
 
     // NEW: staged image state
@@ -168,11 +172,13 @@
     const settingsSaveBtn    = document.getElementById('settings-save-btn');
     const sHistoryCount      = document.getElementById('s-history-count');
     const sStoreImages       = document.getElementById('s-store-images');
+    const sStreaming         = document.getElementById('s-streaming');
     const sMinimal           = document.getElementById('s-minimal');
 
     settingsBtn.onclick = () => {
         sHistoryCount.value = settings.historyCount;
         sStoreImages.checked = settings.storeImages;
+        sStreaming.checked = settings.streamingEffect;
         sMinimal.checked = (settings.historyCount === 10 && !settings.storeImages);
         settingsModal.classList.add('open');
     };
@@ -188,10 +194,12 @@
     // Uncheck minimal if user manually changes a field
     sHistoryCount.oninput = () => { sMinimal.checked = false; };
     sStoreImages.onchange = () => { sMinimal.checked = false; };
+    sStreaming.onchange   = () => { sMinimal.checked = false; };
 
     settingsSaveBtn.onclick = () => {
-        settings.historyCount = Math.max(1, parseInt(sHistoryCount.value) || DEFAULTS.historyCount);
-        settings.storeImages  = sStoreImages.checked;
+        settings.historyCount    = Math.max(1, parseInt(sHistoryCount.value) || DEFAULTS.historyCount);
+        settings.storeImages     = sStoreImages.checked;
+        settings.streamingEffect = sStreaming.checked;
         localStorage.setItem('gemini_settings', JSON.stringify(settings));
         settingsModal.classList.remove('open');
     };
@@ -352,8 +360,9 @@
                     const stream = session.promptStreaming(messages);
                     for await (const chunk of stream) {
                         fullAiText = chunk.startsWith(fullAiText) ? chunk : fullAiText + chunk;
-                        aiMsgDiv.lastChild.textContent = fullAiText;
+                        if (settings.streamingEffect) aiMsgDiv.lastChild.textContent = fullAiText;
                     }
+                    aiMsgDiv.lastChild.textContent = fullAiText;
                 } catch (_) {
                     // fall back to non-streaming if build doesn't support it for multimodal
                     fullAiText = await session.prompt(messages);
@@ -364,8 +373,9 @@
                 const stream = session.promptStreaming(`${context}\nuser: ${text}\nai:`);
                 for await (const chunk of stream) {
                     fullAiText = chunk.startsWith(fullAiText) ? chunk : fullAiText + chunk;
-                    aiMsgDiv.textContent = fullAiText;
+                    if (settings.streamingEffect) aiMsgDiv.textContent = fullAiText;
                 }
+                aiMsgDiv.textContent = fullAiText;
             }
 
             allChats[currentChatId].history.push({ role: 'ai', text: fullAiText });
