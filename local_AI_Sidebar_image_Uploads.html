@@ -97,7 +97,7 @@
         <div id="input-row">
             <input type="file" id="img-file-input" accept="image/*" style="display:none">
             <button class="btn-outline" id="img-attach-btn" title="Attach image">🖼</button>
-            <input type="text" id="userInput" placeholder="Type a message..." disabled>
+            <textarea id="userInput" placeholder="Type a message..." disabled rows="1" style="resize:none;overflow-y:hidden;line-height:1.4;padding:12px;border:1px solid #ccc;border-radius:5px;outline:none;flex:1;font-family:sans-serif;font-size:14px;"></textarea>
             <button id="sendBtn" class="btn-primary" disabled>Send</button>
         </div>
     </div>
@@ -112,7 +112,7 @@
             <input type="number" id="s-history-count" min="1" max="100">
         </div>
         <div class="setting-row">
-            <label for="s-store-images">Store images in localStorage (must be checked before uploading for it to work)</label>
+            <label for="s-store-images">Store images in localStorage</label>
             <input type="checkbox" id="s-store-images">
         </div>
         <hr id="settings-divider">
@@ -326,6 +326,7 @@
         const imageDataUrl = stagedDataUrl;
         clearStaged();
         userInput.value = '';
+        userInput.style.height = 'auto';
 
         allChats[currentChatId].history.push({ role: 'user', text, ...(settings.storeImages && imageDataUrl ? { imageDataUrl } : {}) });
         appendToUI('user', text, imageDataUrl);
@@ -393,7 +394,10 @@
 
     document.getElementById('new-chat-btn').onclick = startNewChat;
     sendBtn.onclick = sendMessage;
-    userInput.onkeypress = (e) => { if (e.key === 'Enter') sendMessage(); };
+    userInput.onkeydown = (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+        else if (e.key === 'Enter' && e.shiftKey) { setTimeout(() => { userInput.style.height = 'auto'; userInput.style.height = userInput.scrollHeight + 'px'; }, 0); }
+    };
 
     init();
 </script>
